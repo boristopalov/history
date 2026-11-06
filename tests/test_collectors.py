@@ -4,7 +4,7 @@ from datetime import datetime
 
 from history.collectors.base import APPLE_EPOCH
 from history.collectors.browsers import browser_collectors
-from history.collectors.calendar import calendar_collector, ics_collector
+from history.collectors.calendar import ics_collector
 from history.collectors.git import git_collector
 from history.collectors.location import location_collector
 from history.collectors.messages import decode_attributed_body, messages_collector
@@ -65,7 +65,7 @@ def test_messages_reads_text_skips_tapbacks_and_resumes(tmp_path):
     conn.commit()
     conn.close()
 
-    collector = messages_collector(path)
+    collector = messages_collector(path, address_books=[])
     events = events_from(collector)
     assert [e.body for e in events] == ["plain", "rich"]
     assert events[0].ts == 100 + APPLE_EPOCH
@@ -73,8 +73,33 @@ def test_messages_reads_text_skips_tapbacks_and_resumes(tmp_path):
     assert [e.body for e in events_from(collector, cursor="1")] == ["rich"]
 
 
+def test_messages_use_contact_names_and_keep_the_handle(tmp_path):
+    path = make_db(tmp_path / "chat.db", MESSAGES_SCHEMA)
+    book = make_db(
+        tmp_path / "book.abcddb",
+        """CREATE TABLE ZABCDRECORD (Z_PK INTEGER PRIMARY KEY, ZFIRSTNAME TEXT, ZLASTNAME TEXT);
+        CREATE TABLE ZABCDPHONENUMBER (ZOWNER INTEGER, ZFULLNUMBER TEXT);
+        CREATE TABLE ZABCDEMAILADDRESS (ZOWNER INTEGER, ZADDRESS TEXT);
+        INSERT INTO ZABCDRECORD VALUES (1, 'Ada', 'Lovelace');
+        INSERT INTO ZABCDPHONENUMBER VALUES (1, '(555) 123-4567');""",
+    )
+    conn = sqlite3.connect(path)
+    insert = (
+        "INSERT INTO message (ROWID, guid, text, date, is_from_me, service,"
+        " cache_has_attachments, handle_id) VALUES (?,?,?,?,?,?,?,?)"
+    )
+    conn.execute(insert, (1, "a", "hi", 100, 0, "iMessage", 0, 1))
+    conn.execute(insert, (2, "b", "yo", 200, 1, "iMessage", 0, 0))
+    conn.commit()
+    conn.close()
+    known, mine = events_from(messages_collector(path, address_books=[book]))
+    assert known.title == "Ada Lovelace"
+    assert known.data["handle"] == "+15551234567"
+    assert mine.title == "Me"
+
+
 def test_missing_database_yields_nothing(tmp_path):
-    assert events_from(messages_collector(tmp_path / "absent.db")) == []
+    assert events_from(messages_collector(tmp_path / "absent.db", address_books=[])) == []
     assert events_from(photos_collector(tmp_path / "absent.db")) == []
 
 
@@ -119,6 +144,19 @@ def test_browsers_read_every_engine_and_skip_noise(tmp_path):
     assert visits["browser.firefox.abc.default"][0].ts == 1700000000
 
 
+def test_browser_visit_without_a_title_shows_the_site(tmp_path):
+    make_db(
+        tmp_path / "Library/Safari/History.db",
+        """CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT);
+        CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER,
+            visit_time REAL, title TEXT);
+        INSERT INTO history_items VALUES (1, 'https://example.com/a/b');
+        INSERT INTO history_visits VALUES (1, 1, 100.0, NULL);""",
+    )
+    safari = browser_collectors(home=tmp_path)[0]
+    assert events_from(safari)[0].title == "example.com"
+
+
 def test_photos_are_fixes_only_when_geotagged(tmp_path):
     path = make_db(
         tmp_path / "Photos.sqlite",
@@ -145,41 +183,6 @@ def test_notes_skip_deleted(tmp_path):
     )
     (note,) = events_from(notes_collector(path))
     assert (note.title, note.body, note.ts) == ("Title", "Snip", 100 + APPLE_EPOCH)
-
-
-CALENDAR_SCHEMA = """
-CREATE TABLE CalendarItem (ROWID INTEGER PRIMARY KEY, UUID TEXT, summary TEXT, description TEXT,
-    url TEXT, start_tz TEXT, all_day INTEGER, start_date REAL, end_date REAL, location_id INTEGER,
-    hidden INTEGER, has_recurrences INTEGER);
-CREATE TABLE OccurrenceCache (event_id INTEGER, occurrence_date REAL, occurrence_start_date REAL,
-    occurrence_end_date REAL);
-CREATE TABLE Location (ROWID INTEGER PRIMARY KEY, title TEXT, address TEXT, latitude REAL,
-    longitude REAL);
-INSERT INTO Location VALUES (1, 'Cafe', '1 Main St', 48.8, 2.3);
-INSERT INTO CalendarItem VALUES (1, 'once', 'Coffee', NULL, NULL, 'UTC', 0, 1000, 2000, 1, 0, 0);
-INSERT INTO CalendarItem VALUES (2, 'weekly', 'Standup', NULL, NULL, 'UTC', 0, 5000, 5100, 0, 0, 1);
-INSERT INTO OccurrenceCache VALUES (2, 5000, NULL, 5100), (2, 609800, NULL, 609900);
-INSERT INTO CalendarItem VALUES (3, 'float', 'Holiday', NULL, NULL, '_float', 1, 86400, 172800, 0, 0, 0);
-INSERT INTO OccurrenceCache VALUES (3, 86400, NULL, 172800), (3, 172800, NULL, 259200);
-"""
-
-
-def test_calendar_expands_recurrences_and_keeps_places_as_non_fixes(tmp_path):
-    path = make_db(tmp_path / "Calendar.sqlitedb", CALENDAR_SCHEMA)
-    events = events_from(calendar_collector(path))
-    assert sorted(e.title for e in events) == ["Coffee", "Holiday", "Standup", "Standup"]
-    assert len({e.source_id for e in events}) == 4
-    standups = sorted(e.ts for e in events if e.title == "Standup")
-    assert standups == [5000 + APPLE_EPOCH, 609800 + APPLE_EPOCH]
-    coffee = next(e for e in events if e.title == "Coffee")
-    assert coffee.lat == 48.8 and not coffee.is_fix
-    assert coffee.data["place"] == "Cafe"
-
-
-def test_floating_calendar_times_are_local_wall_clock(tmp_path):
-    path = make_db(tmp_path / "Calendar.sqlitedb", CALENDAR_SCHEMA)
-    holiday = next(e for e in events_from(calendar_collector(path)) if e.title == "Holiday")
-    assert datetime.fromtimestamp(holiday.ts) == datetime(2001, 1, 2)
 
 
 def test_ics_feed_reads_events(tmp_path):
@@ -229,6 +232,21 @@ def test_git_keeps_only_your_commits(tmp_path):
     assert commit.data["repo"] == "proj"
 
 
+def test_a_commit_in_two_clones_has_one_id(tmp_path):
+    repo = tmp_path / "proj"
+    repo.mkdir()
+    env = ["-c", "user.email=me@test", "-c", "user.name=x"]
+    subprocess.run(["git", *env, "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", *env, "commit", "--allow-empty", "-m", "one"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    subprocess.run(["git", "clone", str(repo), str(tmp_path / "copy")], check=True, capture_output=True)
+    events = events_from(git_collector([tmp_path], ["me@test"]))
+    assert len(events) == 2
+    assert len({e.source_id for e in events}) == 1
+
+
 def test_transactions_dedupe_across_exports_but_keep_real_repeats(tmp_path):
     rows = "Transaction Date,Description,Amount\n01/15/2026,COFFEE,4.50\n01/15/2026,COFFEE,4.50\n"
     (tmp_path / "jan.csv").write_text(rows)
@@ -244,8 +262,6 @@ def test_music_keeps_one_event_per_play_across_samples(tmp_path):
 
     def sample(position, now):
         def ask(app):
-            if app != "Spotify":
-                return ""
             return sep.join(["id1", "Track", "Artist", "Album", str(position)])
 
         return events_from(music_collector(ask=ask, now=lambda: now))[0]

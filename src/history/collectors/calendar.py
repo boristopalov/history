@@ -1,75 +1,85 @@
-"""Apple Calendar, plus ICS feeds for anything that isn't synced to it (Luma, Partiful)."""
+"""Google Calendar, plus ICS feeds for anything that isn't on it."""
 
-from collections.abc import Iterator
-from contextlib import closing
-from datetime import date, datetime, time
+from collections.abc import Callable, Iterator
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from typing import Any
 
 import httpx
 import icalendar
 
-from history.collectors.base import (
-    Collector,
-    apple_floating_to_unix,
-    apple_to_unix,
-    full_scan,
-    open_readonly,
-)
+from history.collectors.base import Collector, full_scan
+from history.collectors.google import gws
 from history.models import Event
 
-DEFAULT_PATH = (
-    Path.home() / "Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb"
-)
-
-# OccurrenceCache expands recurring events, for a window around today only. Its
-# occurrence_date is always an instant, even for floating events. It also holds one row
-# per day of a multi-day event, which is why only recurring items are joined to it.
-QUERY = """
-SELECT i.UUID, i.summary, i.description, i.url, i.start_tz, i.all_day, i.start_date, i.end_date,
-       o.occurrence_date, o.occurrence_end_date,
-       l.title AS place, l.address, l.latitude, l.longitude
-FROM CalendarItem i
-LEFT JOIN OccurrenceCache o ON o.event_id = i.ROWID AND i.has_recurrences = 1
-LEFT JOIN Location l ON l.ROWID = i.location_id
-WHERE i.hidden = 0 AND i.start_date IS NOT NULL
-"""
+# Recurring events are expanded by the API, so the window has to be bounded.
+DAYS_BACK = 365
+DAYS_AHEAD = 180
+SKIPPED_CALENDARS = ("#holiday@", "#contacts@")
 
 
-def _events(path: Path) -> Iterator[Event]:
-    with closing(open_readonly(path)) as conn:
-        for row in conn.execute(QUERY):
-            if row["occurrence_date"] is not None:
-                start = apple_to_unix(row["occurrence_date"])
-                end = row["occurrence_end_date"] and apple_to_unix(row["occurrence_end_date"])
-            else:
-                floating = row["start_tz"] == "_float"
-                to_unix = apple_floating_to_unix if floating else apple_to_unix
-                start = to_unix(row["start_date"])
-                end = row["end_date"] and to_unix(row["end_date"])
-            located = bool(row["latitude"])
-            yield Event(
-                source="calendar",
-                source_id=f"{row['UUID']}:{start}",
-                ts=start,
-                end_ts=end,
-                title=row["summary"],
-                body=row["description"],
-                url=row["url"],
-                lat=row["latitude"] if located else None,
-                lon=row["longitude"] if located else None,
-                data={
-                    "place": row["place"],
-                    "address": row["address"],
-                    "all_day": bool(row["all_day"]),
-                },
-            )
+def _google_time(value: dict[str, str]) -> float:
+    if "dateTime" in value:
+        return datetime.fromisoformat(value["dateTime"]).timestamp()
+    return datetime.fromisoformat(value["date"]).timestamp()  # all-day: local midnight
 
 
-def calendar_collector(path: Path = DEFAULT_PATH) -> Collector:
-    def collect(cursor: str | None):
-        return full_scan("calendar", _events(path)) if path.exists() else []
+def _google_event(item: dict[str, Any], calendar: dict[str, Any]) -> Event:
+    me = next((a for a in item.get("attendees", []) if a.get("self")), {})
+    return Event(
+        source="calendar",
+        # An invite on two of your calendars has the same id, so it stays one event.
+        source_id=f"google:{item['id']}",
+        ts=_google_time(item["start"]),
+        end_ts=_google_time(item["end"]) if "end" in item else None,
+        title=item.get("summary"),
+        body=item.get("description"),
+        url=item.get("htmlLink"),
+        data={
+            "place": item.get("location"),
+            "all_day": "date" in item["start"],
+            "calendar": calendar.get("summary"),
+            "response": me.get("responseStatus"),
+        },
+    )
 
-    return Collector(name="calendar", source="calendar", collect=collect)
+
+def _pages(run: Callable[..., dict], command: tuple[str, ...], **params) -> Iterator[dict]:
+    token = None
+    while True:
+        page = run(*command, **params, **({"pageToken": token} if token else {}))
+        yield from page.get("items", [])
+        token = page.get("nextPageToken")
+        if not token:
+            return
+
+
+def _google_events(run: Callable[..., dict], now: datetime) -> Iterator[Event]:
+    for calendar in _pages(run, ("calendar", "calendarList", "list")):
+        if any(marker in calendar["id"] for marker in SKIPPED_CALENDARS):
+            continue
+        items = _pages(
+            run,
+            ("calendar", "events", "list"),
+            calendarId=calendar["id"],
+            singleEvents=True,
+            maxResults=2500,
+            timeMin=(now - timedelta(days=DAYS_BACK)).isoformat(),
+            timeMax=(now + timedelta(days=DAYS_AHEAD)).isoformat(),
+        )
+        for item in items:
+            if item.get("status") != "cancelled":
+                yield _google_event(item, calendar)
+
+
+def google_calendar_collector(
+    run: Callable[..., dict] = gws, now: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> Collector:
+    return Collector(
+        name="calendar.google",
+        source="calendar",
+        collect=lambda cursor: full_scan("calendar.google", _google_events(run, now())),
+    )
 
 
 def _ics_timestamp(value: date | datetime) -> float:
@@ -80,8 +90,7 @@ def _ics_timestamp(value: date | datetime) -> float:
 
 def _read_feed(feed: str) -> bytes:
     if feed.startswith(("http://", "https://")):
-        url = feed
-        return httpx.get(url, follow_redirects=True, timeout=30).raise_for_status().content
+        return httpx.get(feed, follow_redirects=True, timeout=30).raise_for_status().content
     return Path(feed).expanduser().read_bytes()
 
 

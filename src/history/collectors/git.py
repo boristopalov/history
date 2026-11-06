@@ -35,7 +35,7 @@ def _events(roots: list[Path], emails: list[str]) -> Iterator[Event]:
             if email.lower() in wanted:
                 yield Event(
                     source="git",
-                    source_id=f"{repo.name}:{sha}",
+                    source_id=sha,  # a commit in two clones is still one commit
                     ts=float(timestamp),
                     title=subject,
                     data={"repo": repo.name, "sha": sha},

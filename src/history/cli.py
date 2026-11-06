@@ -5,6 +5,7 @@ import httpx
 import uvicorn
 
 from history import daemon
+from history.collectors import simplefin, spotify
 from history.config import load_config
 from history.server.app import create_app
 
@@ -19,6 +20,8 @@ def main() -> None:
     run = commands.add_parser("daemon", help="pull from every source on a schedule")
     run.add_argument("--once", action="store_true", help="sync everything once, then exit")
     commands.add_parser("status", help="show what the server has")
+    commands.add_parser("spotify-login", help="connect your Spotify account")
+    commands.add_parser("simplefin-link", help="connect your banks through SimpleFIN Bridge")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -28,12 +31,20 @@ def main() -> None:
     if args.command == "server":
         if config.host not in LOOPBACK_HOSTS and not config.api_token:
             parser.error(f"set api_token in the config before binding to {config.host}")
-        app = create_app(config.db_path, config.api_token)
+        app = create_app(
+            config.db_path, config.api_token, anthropic_api_key=config.anthropic_api_key
+        )
         uvicorn.run(app, host=config.host, port=config.port)
     elif args.command == "daemon" and args.once:
         daemon.run_once(config)
     elif args.command == "daemon":
         daemon.run_forever(config)
+    elif args.command == "spotify-login":
+        if not config.spotify_client_id:
+            parser.error("set spotify_client_id in the config first")
+        spotify.login(config.spotify_client_id, config.credentials_dir)
+    elif args.command == "simplefin-link":
+        simplefin.link(config.credentials_dir)
     elif args.command == "status":
         response = httpx.get(f"{config.server_url}/stats", headers=config.auth_headers)
         rows = response.raise_for_status().json()

@@ -1,8 +1,8 @@
-"""What's playing right now in Spotify or Apple Music, sampled on each run.
+"""What's playing right now in Apple Music, sampled on each run. Spotify has its own collector.
 
 macOS keeps no usable play history: knowledgeC's now-playing stream has no track titles.
 So history starts when the daemon starts, and tracks shorter than the interval can be
-missed. The first run asks for Automation permission for each player.
+missed. The first run asks for Automation permission.
 """
 
 import subprocess
@@ -29,7 +29,7 @@ end if
 return ""
 """
 
-PLAYERS = {"Spotify": "id of current track", "Music": "persistent ID of current track"}
+PLAYERS = {"Music": "persistent ID of current track"}
 
 
 def _ask_player(app: str) -> str:

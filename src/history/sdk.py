@@ -6,6 +6,7 @@ See "Writing a collector" in the README.
 from history.collectors.base import (
     BATCH_SIZE,
     Collector,
+    CollectorNotReady,
     apple_to_unix,
     full_scan,
     open_readonly,
@@ -18,6 +19,7 @@ __all__ = [
     "BATCH_SIZE",
     "Batch",
     "Collector",
+    "CollectorNotReady",
     "Config",
     "Event",
     "apple_to_unix",

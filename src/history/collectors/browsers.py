@@ -1,6 +1,7 @@
 """Visit history from Safari, Chrome and Firefox, across every profile."""
 
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from history.collectors.base import Collector, apple_to_unix, chrome_to_unix, paged
 from history.models import Event
@@ -32,7 +33,7 @@ def _collector(name: str, path: Path, query: str, timestamp) -> Collector:
             source="browser",
             source_id=f"{name}:{row['id']}",
             ts=timestamp(row),
-            title=row["title"],
+            title=row["title"] or urlsplit(row["url"]).netloc or row["url"],
             url=row["url"],
             data={"browser": name.split(".")[1]},
         )

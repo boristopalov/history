@@ -4,7 +4,6 @@ import sqlite3
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from itertools import batched
 from pathlib import Path
 
@@ -13,6 +12,10 @@ from history.models import Batch, Event
 BATCH_SIZE = 2000
 APPLE_EPOCH = 978307200  # 2001-01-01 UTC, the zero point of Core Data timestamps
 CHROME_EPOCH_OFFSET = 11644473600  # seconds from 1601-01-01 to 1970-01-01
+
+
+class CollectorNotReady(Exception):
+    """The source needs something from the user, like a login. Logged without a traceback."""
 
 
 @dataclass(frozen=True)
@@ -32,12 +35,6 @@ class Collector:
 
 def apple_to_unix(seconds: float) -> float:
     return seconds + APPLE_EPOCH
-
-
-def apple_floating_to_unix(seconds: float) -> float:
-    """Converts an Apple timestamp that holds a local wall-clock time, not an instant."""
-    wall_clock = datetime(2001, 1, 1) + timedelta(seconds=seconds)
-    return wall_clock.timestamp()  # a naive datetime is read as local time
 
 
 def chrome_to_unix(microseconds: int) -> float:

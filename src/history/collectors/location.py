@@ -14,6 +14,7 @@ def _to_event(line: bytes) -> Event:
         source="location",
         source_id=str(fix["ts"]),
         ts=fix["ts"],
+        title="Location fix",
         lat=fix["lat"],
         lon=fix["lon"],
         is_fix=True,

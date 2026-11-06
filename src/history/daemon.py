@@ -12,6 +12,7 @@ import time
 import httpx
 
 from history.collectors import Collector, all_collectors
+from history.collectors.base import CollectorNotReady
 from history.config import Config
 
 log = logging.getLogger("history.daemon")
@@ -36,6 +37,8 @@ def run_collectors(http: httpx.Client, collectors: list[Collector]) -> None:
             log.warning(
                 "%s: %s (does this process have Full Disk Access?)", collector.name, error
             )
+        except CollectorNotReady as reason:
+            log.warning("%s: %s", collector.name, reason)
         except Exception:
             log.exception("%s: sync failed", collector.name)
         else:

@@ -10,8 +10,10 @@ backfill can land after the messages it should locate), so a stored link would g
 import json
 import math
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from history.models import Batch
 
@@ -51,6 +53,7 @@ ON CONFLICT (source, source_id) DO UPDATE SET
 
 EARTH_RADIUS_M = 6_371_000
 METERS_PER_DEGREE_LAT = 111_195
+MAX_TS = 32_503_680_000  # the year 3000; nothing later can be a real event
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -91,6 +94,24 @@ def stats(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def days(conn: sqlite3.Connection, tz: ZoneInfo) -> list[dict[str, Any]]:
+    """Calendar days in `tz` that have events, oldest first."""
+    # Every timezone in use today is a multiple of 15 minutes from UTC, so a 15-minute
+    # bucket never straddles local midnight. The bounds skip junk timestamps from ingest.
+    buckets = conn.execute(
+        "SELECT CAST(ts / 900 AS INTEGER) * 900 AS bucket, COUNT(*) AS events, "
+        "SUM(is_fix) AS fixes FROM events WHERE ts BETWEEN 0 AND ? GROUP BY bucket",
+        (MAX_TS,),
+    )
+    totals: dict[str, dict[str, Any]] = {}
+    for bucket in buckets:
+        date = datetime.fromtimestamp(bucket["bucket"], tz).date().isoformat()
+        day = totals.setdefault(date, {"date": date, "events": 0, "fixes": 0})
+        day["events"] += bucket["events"]
+        day["fixes"] += bucket["fixes"]
+    return [totals[date] for date in sorted(totals)]
+
+
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp, dl = p2 - p1, math.radians(lon2 - lon1)
@@ -98,7 +119,7 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
-def _nearest_fix(conn: sqlite3.Connection, ts: float, max_gap_s: float) -> dict[str, Any] | None:
+def nearest_fix(conn: sqlite3.Connection, ts: float, max_gap_s: float) -> dict[str, Any] | None:
     columns = "SELECT lat, lon, source, ts FROM events WHERE is_fix = 1 AND lat IS NOT NULL"
     before = conn.execute(f"{columns} AND ts <= ? ORDER BY ts DESC LIMIT 1", (ts,)).fetchone()
     after = conn.execute(f"{columns} AND ts >= ? ORDER BY ts ASC LIMIT 1", (ts,)).fetchone()
@@ -128,7 +149,7 @@ def _with_location(
             "gap_s": 0.0,
         }
     else:
-        event["location"] = _nearest_fix(conn, event["ts"], max_gap_s)
+        event["location"] = nearest_fix(conn, event["ts"], max_gap_s)
     return event
 
 

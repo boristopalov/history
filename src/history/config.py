@@ -11,7 +11,17 @@ CONFIG_DIR = Path.home() / ".config/history"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 # Sources that are rescanned in full run less often than the default interval.
-DEFAULT_INTERVALS = {"calendar": 300, "notes": 300, "git": 600, "photos": 900, "transactions": 900}
+DEFAULT_INTERVALS = {
+    "app_usage": 300,
+    "calendar": 300,
+    "demo": 900,
+    "git": 600,
+    "health": 900,
+    "notes": 300,
+    "photos": 900,
+    "receipts": 300,
+    "transactions": 900,
+}
 
 
 def _git_email() -> list[str]:
@@ -36,6 +46,11 @@ class Config:
     location_log: Path = DATA_DIR / "location.jsonl"
     plugins_dir: Path = CONFIG_DIR / "collectors"
     api_token: str | None = None  # required by the server when set
+    anthropic_api_key: str | None = None  # for Ask; falls back to ANTHROPIC_API_KEY
+    credentials_dir: Path = CONFIG_DIR / "credentials"
+    spotify_client_id: str | None = None
+    health_mock: bool = True  # invented data until the iPhone link exists
+    demo_week: bool = True  # an invented week of locations, trips and purchases
 
     @property
     def server_url(self) -> str:
@@ -55,7 +70,14 @@ def load_config(path: Path | None = None) -> Config:
     if not path.exists():
         return Config()
     raw = tomllib.loads(path.read_text())
-    for key in ("db_path", "transactions_dir", "location_log", "plugins_dir"):
+    paths = (
+        "db_path",
+        "transactions_dir",
+        "location_log",
+        "plugins_dir",
+        "credentials_dir",
+    )
+    for key in paths:
         if key in raw:
             raw[key] = Path(raw[key]).expanduser()
     if "git_roots" in raw:

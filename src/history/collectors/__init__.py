@@ -4,15 +4,22 @@ import importlib.util
 import logging
 from pathlib import Path
 
+from history.collectors.app_usage import app_usage_collector
 from history.collectors.base import Collector
 from history.collectors.browsers import browser_collectors
-from history.collectors.calendar import calendar_collector, ics_collector
+from history.collectors.calendar import google_calendar_collector, ics_collector
+from history.collectors.demo_week import demo_week_collector
 from history.collectors.git import git_collector
+from history.collectors.health import mock_health_collector
 from history.collectors.location import location_collector
 from history.collectors.messages import messages_collector
 from history.collectors.music import music_collector
 from history.collectors.notes import notes_collector
+from history.collectors.partiful import partiful_collector
 from history.collectors.photos import photos_collector
+from history.collectors.receipts import receipts_collector
+from history.collectors.simplefin import simplefin_collector
+from history.collectors.spotify import spotify_collector
 from history.collectors.transactions import transactions_collector
 from history.config import Config
 
@@ -48,12 +55,19 @@ def all_collectors(config: Config) -> list[Collector]:
         photos_collector(),
         messages_collector(),
         *browser_collectors(),
-        calendar_collector(),
+        google_calendar_collector(),
         *(ics_collector(feed, i) for i, feed in enumerate(config.ics_feeds)),
         notes_collector(),
         music_collector(),
+        spotify_collector(config.spotify_client_id, config.credentials_dir),
         git_collector(config.git_roots, config.git_emails),
         transactions_collector(config.transactions_dir),
+        simplefin_collector(config.credentials_dir),
+        app_usage_collector(),
+        receipts_collector(),
+        partiful_collector(),
+        *([mock_health_collector()] if config.health_mock else []),
+        *([demo_week_collector()] if config.demo_week else []),
     ]
     collectors: dict[str, Collector] = {}
     for collector in builtin + load_plugins(config):
