@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDays, fetchEvents } from "./api";
+import { EventCard } from "./EventCard";
 import { MapView, type Camera, type Pin, type Point } from "./MapView";
 import { Panel } from "./Panel";
 import { Scrubber } from "./Scrubber";
-import { buildTrack, dayBounds, localDate } from "./track";
+import {
+  buildTrack,
+  dayBounds,
+  DEFAULT_RANGE_S,
+  eventsInRange,
+  localDate,
+  RANGES_S,
+} from "./track";
 import type { Anchor, Day, HistoryEvent, QueryResult } from "./types";
 
 const PLAYBACK_SPEED = 1800; // seconds of the day per second: a day plays in 48 seconds
 const PANEL_WIDTH_PX = 400;
+const CARD_WIDTH_PX = 340;
+const RANGE_KEY = "history.eventRange";
 const NARROW_PX = 820;
 
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -17,6 +27,15 @@ function latestDay(days: Day[]): string {
   const today = localDate(Date.now() / 1000);
   const past = days.filter((day) => day.date <= today);
   return past.filter((day) => day.fixes > 0).at(-1)?.date ?? past.at(-1)?.date ?? today;
+}
+
+function savedRange(): number {
+  try {
+    const saved = Number(localStorage.getItem(RANGE_KEY));
+    return RANGES_S.includes(saved) ? saved : DEFAULT_RANGE_S;
+  } catch {
+    return DEFAULT_RANGE_S;
+  }
 }
 
 function eventPoints(events: HistoryEvent[]): Point[] {
@@ -38,6 +57,8 @@ export function App() {
   const [camera, setCamera] = useState<Camera | null>(null);
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > NARROW_PX);
   const [narrow, setNarrow] = useState(() => window.innerWidth <= NARROW_PX);
+  const [cardOpen, setCardOpen] = useState(() => window.innerWidth > NARROW_PX);
+  const [rangeS, setRangeS] = useState(savedRange);
 
   // A jump to another day sets where to land before that day has loaded.
   const landing = useRef<{ t: number; point: Point | null } | null>(null);
@@ -47,6 +68,7 @@ export function App() {
     [date],
   );
   const track = useMemo(() => buildTrack(events), [events]);
+  const group = useMemo(() => eventsInRange(events, t, rangeS), [events, t, rangeS]);
 
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth <= NARROW_PX);
@@ -129,7 +151,7 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      const typing = ["INPUT", "TEXTAREA", "BUTTON"].includes(target.tagName);
+      const typing = ["INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(target.tagName);
       if (event.code === "Space" && !typing) {
         event.preventDefault();
         togglePlay();
@@ -167,6 +189,31 @@ export function App() {
     [date],
   );
 
+  const pickEvent = useCallback(
+    (event: HistoryEvent) => jumpTo({ ts: event.ts, location: event.location }),
+    [jumpTo],
+  );
+
+  const changeRange = useCallback((next: number) => {
+    setRangeS(next);
+    try {
+      localStorage.setItem(RANGE_KEY, String(next));
+    } catch {
+      // Not remembered, but it still applies for this visit.
+    }
+  }, []);
+
+  // On a phone there's only room for one of these at a time.
+  const togglePanel = () => {
+    if (narrow && !panelOpen) setCardOpen(false);
+    setPanelOpen(!panelOpen);
+  };
+
+  const toggleCard = () => {
+    if (narrow && !cardOpen) setPanelOpen(false);
+    setCardOpen(!cardOpen);
+  };
+
   const pickDate = useCallback((day: string) => {
     landing.current = null;
     setDate(day);
@@ -175,11 +222,11 @@ export function App() {
   const padding = useMemo(
     () => ({
       top: 56,
-      left: 56,
+      left: cardOpen && !narrow ? CARD_WIDTH_PX + 56 : 56,
       bottom: 216,
       right: panelOpen && !narrow ? PANEL_WIDTH_PX + 56 : 56,
     }),
-    [panelOpen, narrow],
+    [panelOpen, cardOpen, narrow],
   );
 
   const noData = !loading && !failure && days.length === 0;
@@ -191,6 +238,7 @@ export function App() {
         events={events}
         pins={pins}
         t={t}
+        rangeS={rangeS}
         playing={playing}
         camera={camera}
         padding={padding}
@@ -207,25 +255,43 @@ export function App() {
       <Panel
         open={panelOpen}
         tz={tz}
-        onToggle={() => setPanelOpen((open) => !open)}
+        onToggle={togglePanel}
         onResult={showResult}
         onPick={jumpTo}
       />
       {date && (
-        <Scrubber
-          date={date}
-          days={days}
-          start={start}
-          end={end}
-          t={t}
-          playing={playing}
-          loading={loading}
-          track={track}
-          events={events}
-          onDate={pickDate}
-          onSeek={seek}
-          onTogglePlay={togglePlay}
-        />
+        <div className="dock">
+          {cardOpen && events.length > 0 && (
+            <EventCard
+              group={group}
+              t={t}
+              start={start}
+              end={end}
+              rangeS={rangeS}
+              onPick={pickEvent}
+              onClose={toggleCard}
+            />
+          )}
+          <Scrubber
+            date={date}
+            days={days}
+            start={start}
+            end={end}
+            t={t}
+            playing={playing}
+            loading={loading}
+            track={track}
+            events={events}
+            groupSize={group.length}
+            rangeS={rangeS}
+            cardOpen={cardOpen}
+            onRange={changeRange}
+            onToggleCard={toggleCard}
+            onDate={pickDate}
+            onSeek={seek}
+            onTogglePlay={togglePlay}
+          />
+        </div>
       )}
     </main>
   );

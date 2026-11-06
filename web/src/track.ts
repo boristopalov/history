@@ -19,6 +19,10 @@ export type Position = {
 /** Beyond this, the time between two fixes says nothing about the route between them. */
 export const MAX_GAP_S = 30 * 60;
 
+/** The choices for how far around the playhead events are grouped, in seconds. */
+export const RANGES_S = [5 * 60, 15 * 60, 30 * 60, 60 * 60, 3 * 60 * 60];
+export const DEFAULT_RANGE_S = 15 * 60;
+
 const EARTH_RADIUS_KM = 6371;
 
 function haversineKm(a: Fix, b: Fix): number {
@@ -83,19 +87,19 @@ export function positionAt(track: Track, t: number): Position | null {
   return { lat: before.lat, lon: before.lon, stale: t - before.t > MAX_GAP_S };
 }
 
-/** The event closest to t, among those within `withinS`. Fixes are the path, not events. */
-export function nearestEvent(
-  events: HistoryEvent[],
-  t: number,
-  withinS: number,
-): HistoryEvent | null {
-  let best: HistoryEvent | null = null;
-  for (const event of events) {
-    if (event.is_fix) continue;
-    const distance = Math.abs(event.ts - t);
-    if (distance <= withinS && (!best || distance < Math.abs(best.ts - t))) best = event;
-  }
-  return best;
+/** A bare location ping is the path, not something you did. A geotagged photo is both. */
+export function isActivity(event: HistoryEvent): boolean {
+  return !(event.is_fix && /^location(\.|$)/.test(event.source));
+}
+
+/** What you did within rangeS of t, oldest first. Anything still going on at t counts. */
+export function eventsInRange(events: HistoryEvent[], t: number, rangeS: number): HistoryEvent[] {
+  return events
+    .filter(
+      (event) =>
+        isActivity(event) && event.ts <= t + rangeS && (event.end_ts ?? event.ts) >= t - rangeS,
+    )
+    .sort((a, b) => a.ts - b.ts);
 }
 
 /** Start and end of a local calendar day, in unix seconds. A DST day isn't 24 hours. */
@@ -126,6 +130,10 @@ export function formatClock(t: number, dayEnd: number): string {
   const d = new Date(t * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+export function formatRange(rangeS: number): string {
+  return rangeS < 3600 ? `±${rangeS / 60} min` : `±${rangeS / 3600} hr`;
 }
 
 /** One line for an event: "Priya: dinner at 8?", or whichever of those it has. */

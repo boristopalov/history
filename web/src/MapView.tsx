@@ -1,11 +1,12 @@
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { eventText, MAX_GAP_S, positionAt, type Track } from "./track";
+import { eventText, isActivity, MAX_GAP_S, positionAt, type Track } from "./track";
 import type { HistoryEvent } from "./types";
 
 const STYLE = "https://tiles.openfreemap.org/styles/positron";
 const PATH = "#6366f1";
 const PIN = "#f59e0b";
+const IN_RANGE = "#0ea5e9";
 const MAX_POPUP_EVENTS = 5;
 const FOLLOW_MARGIN_PX = 140;
 
@@ -25,6 +26,7 @@ type Props = {
   events: HistoryEvent[];
   pins: Pin[];
   t: number;
+  rangeS: number;
   playing: boolean;
   camera: Camera | null;
   padding: Padding;
@@ -102,6 +104,7 @@ export function MapView({
   events,
   pins,
   t,
+  rangeS,
   playing,
   camera,
   padding,
@@ -192,6 +195,17 @@ export function MapView({
           "circle-stroke-width": 1,
         },
       });
+      instance.addLayer({
+        id: "events-in-range",
+        type: "circle",
+        source: "events",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3.5, 15, 6],
+          "circle-color": IN_RANGE,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+        },
+      });
       // Invisible, and larger than the dots, so that they're easy to click or tap.
       instance.addLayer({
         id: "events-target",
@@ -275,8 +289,14 @@ export function MapView({
     source("events").setData(
       collection(
         events.flatMap((event, index) =>
-          !event.is_fix && event.location
-            ? [point(event.location.lat, event.location.lon, { t: event.ts, index })]
+          isActivity(event) && event.location
+            ? [
+                point(event.location.lat, event.location.lon, {
+                  t: event.ts,
+                  end: event.end_ts ?? event.ts,
+                  index,
+                }),
+              ]
             : [],
         ),
       ),
@@ -300,7 +320,14 @@ export function MapView({
     ]);
     instance.setFilter("fixes", ["<=", ["get", "t"], t]);
     instance.setFilter("events", ["<=", ["get", "t"], t]);
-    instance.setFilter("events-target", ["<=", ["get", "t"], t]);
+    const inRange: maplibregl.ExpressionSpecification = [
+      "all",
+      ["<=", ["get", "t"], t + rangeS],
+      [">=", ["get", "end"], t - rangeS],
+    ];
+    instance.setFilter("events-in-range", inRange);
+    // Anything lit up has to be clickable, including events just ahead of the playhead.
+    instance.setFilter("events-target", ["any", ["<=", ["get", "t"], t], inRange]);
 
     const position = positionAt(track, t);
     if (!position || !marker.current) {
@@ -322,7 +349,7 @@ export function MapView({
         instance.easeTo({ center: [position.lon, position.lat], padding, duration: 700 });
       }
     }
-  }, [ready, track, t, playing, padding]);
+  }, [ready, track, t, rangeS, playing, padding]);
 
   useEffect(() => {
     const instance = map.current;

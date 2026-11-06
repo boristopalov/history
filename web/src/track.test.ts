@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   buildTrack,
   dayBounds,
+  eventsInRange,
   eventText,
   fixesUpTo,
   formatClock,
+  formatRange,
   hourOf,
   kmUpTo,
   localDate,
   MAX_GAP_S,
-  nearestEvent,
   positionAt,
+  RANGES_S,
 } from "./track";
 import type { HistoryEvent } from "./types";
 
@@ -85,11 +87,38 @@ describe("positionAt", () => {
   });
 });
 
-describe("nearestEvent", () => {
-  it("picks the closest event within range and ignores fixes", () => {
-    const events = [event(100), fix(205, 0, 0), event(190), event(400)];
-    expect(nearestEvent(events, 205, 60)?.ts).toBe(190);
-    expect(nearestEvent(events, 300, 60)).toBeNull();
+describe("eventsInRange", () => {
+  const ids = (events: HistoryEvent[]) => events.map((e) => e.ts);
+
+  it("keeps events within the range on both sides, oldest first", () => {
+    const events = [event(1300), event(1000), event(700), event(1301), event(699)];
+    expect(ids(eventsInRange(events, 1000, 300))).toEqual([700, 1000, 1300]);
+  });
+
+  it("leaves out location pings but keeps a geotagged photo", () => {
+    const photo = event(1010, { source: "photos", lat: 1, lon: 1, is_fix: true });
+    const mock = event(1020, { source: "location.mock", lat: 1, lon: 1, is_fix: true });
+    expect(eventsInRange([fix(1000, 1, 1), photo, mock, event(1030)], 1000, 300)).toEqual([
+      photo,
+      expect.objectContaining({ ts: 1030 }),
+    ]);
+  });
+
+  it("counts an event that's still going on, however long ago it started", () => {
+    const dinner = event(0, { source: "calendar", end_ts: 5400 });
+    expect(eventsInRange([dinner], 5000, 60)).toEqual([dinner]);
+    expect(eventsInRange([dinner], 6000, 60)).toEqual([]);
+  });
+
+  it("counts an event that's about to start", () => {
+    const meeting = event(1200, { end_ts: 4800 });
+    expect(eventsInRange([meeting], 1000, 300)).toEqual([meeting]);
+  });
+});
+
+describe("formatRange", () => {
+  it("labels minutes and hours", () => {
+    expect(RANGES_S.map(formatRange)).toEqual(["±5 min", "±15 min", "±30 min", "±1 hr", "±3 hr"]);
   });
 });
 

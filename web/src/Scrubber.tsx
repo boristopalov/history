@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Icon } from "./icons";
-import { eventText, fixesUpTo, formatClock, hourOf, kmUpTo, nearestEvent, type Track } from "./track";
+import {
+  eventsInRange,
+  fixesUpTo,
+  formatClock,
+  formatRange,
+  hourOf,
+  kmUpTo,
+  RANGES_S,
+  type Track,
+} from "./track";
 import type { Day, HistoryEvent } from "./types";
 
 const TICK_PITCH_PX = 3;
 const TICK_WIDTH_PX = 2;
-const CURRENT_EVENT_WINDOW_S = 10 * 60;
 const AXIS_HOURS = [0, 6, 12, 18, 24];
 
 type Props = {
@@ -18,6 +26,11 @@ type Props = {
   loading: boolean;
   track: Track;
   events: HistoryEvent[];
+  groupSize: number;
+  rangeS: number;
+  cardOpen: boolean;
+  onRange: (rangeS: number) => void;
+  onToggleCard: () => void;
   onDate: (date: string) => void;
   onSeek: (t: number) => void;
   onTogglePlay: () => void;
@@ -84,6 +97,11 @@ export function Scrubber({
   loading,
   track,
   events,
+  groupSize,
+  rangeS,
+  cardOpen,
+  onRange,
+  onToggleCard,
   onDate,
   onSeek,
   onTogglePlay,
@@ -124,9 +142,10 @@ export function Scrubber({
 
   const earlier = days.filter((day) => day.date < date).at(-1);
   const later = days.find((day) => day.date > date);
-  const current = nearestEvent(events, t, CURRENT_EVENT_WINDOW_S);
-  const hovered = hover && nearestEvent(events, hover.t, CURRENT_EVENT_WINDOW_S);
+  const hoveredCount = hover ? eventsInRange(events, hover.t, rangeS).length : 0;
   const km = kmUpTo(track, t);
+  const bandFrom = Math.max(0, (t - rangeS - start) / (end - start));
+  const bandTo = Math.min(1, (t + rangeS - start) / (end - start));
 
   return (
     <section className="scrubber surface" aria-label="Timeline">
@@ -198,11 +217,19 @@ export function Scrubber({
         onKeyDown={onKeyDown}
       >
         <Ticks events={events} start={start} end={end} progress={progress} />
+        <div
+          className="band"
+          style={{ left: `${bandFrom * 100}%`, width: `${(bandTo - bandFrom) * 100}%` }}
+        />
         <div className="thumb" style={{ left: `${progress * 100}%` }} />
         {hover && (
           <div className="rail-tip" style={{ left: `${hover.share * 100}%` }}>
             <span className="rail-tip-time">{formatClock(hover.t, end).slice(0, 5)}</span>
-            {hovered && <span className="rail-tip-text">{eventText(hovered)}</span>}
+            {hoveredCount > 0 && (
+              <span>
+                {hoveredCount} {hoveredCount === 1 ? "event" : "events"}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -212,16 +239,29 @@ export function Scrubber({
           <Icon name="pin" />
           <strong>{fixesUpTo(track, t)}</strong> pts
         </span>
-        <span className="now" title={current ? eventText(current) : undefined}>
+        <span className="group-controls">
           {loading ? (
             "Loading…"
-          ) : current ? (
-            <>
-              <span className="now-source">{current.source}</span> {eventText(current)}
-            </>
           ) : events.length === 0 ? (
             "Nothing recorded this day"
-          ) : null}
+          ) : (
+            <>
+              <button className="group-count" aria-expanded={cardOpen} onClick={onToggleCard}>
+                <strong>{groupSize}</strong> {groupSize === 1 ? "event" : "events"}
+              </button>
+              <select
+                aria-label="Show events within"
+                value={rangeS}
+                onChange={(event) => onRange(Number(event.target.value))}
+              >
+                {RANGES_S.map((option) => (
+                  <option key={option} value={option}>
+                    {formatRange(option)}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </span>
         <span className="stat">
           <Icon name="route" />

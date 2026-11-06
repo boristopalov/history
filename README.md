@@ -52,6 +52,10 @@ The map shows a day, and the timeline scrubs or plays through it. A solid line j
 to 30 minutes apart. A dashed line means a longer gap, where nothing says what route you took,
 so the marker waits at the last fix and turns hollow rather than gliding along it.
 
+The card above the timeline lists everything you did around the playhead, including anything
+still going on then. The range beside the event count sets how far around it to look, and
+applies everywhere: the card, the band on the timeline, and the dots lit up on the map.
+
 The panel on the right searches everything, as a **SQL** box or as **Ask**, an agent that
 writes the queries for you. Any result row with a `ts` goes on the map, placed by the nearest
 fix, and clicking the row jumps to that moment.
