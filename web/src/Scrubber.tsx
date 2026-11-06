@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { memo, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Icon } from "./icons";
 import {
   eventsInRange,
@@ -14,6 +14,8 @@ import type { Day, HistoryEvent } from "./types";
 
 const TICK_PITCH_PX = 3;
 const TICK_WIDTH_PX = 2;
+const TICK_PLAYED = "#7dd3fc";
+const TICK_AHEAD = "rgba(125, 211, 252, 0.32)";
 const AXIS_HOURS = [0, 6, 12, 18, 24];
 
 type Props = {
@@ -36,12 +38,15 @@ type Props = {
   onTogglePlay: () => void;
 };
 
-/** Activity along the day, drawn as ticks that are brighter behind the playhead. */
-function Ticks({ events, start, end, progress }: {
+/**
+ * Activity along the day, drawn once per day. The timeline stacks a dim copy and a bright copy
+ * and clips the bright one at the playhead, so playback never has to redraw this.
+ */
+const Ticks = memo(function Ticks({ events, start, end, color }: {
   events: HistoryEvent[];
   start: number;
   end: number;
-  progress: number;
+  color: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
@@ -53,39 +58,36 @@ function Ticks({ events, start, end, progress }: {
     return () => observer.disconnect();
   }, []);
 
-  const bins = useMemo(() => {
-    const counts = new Array<number>(Math.max(1, Math.floor(width / TICK_PITCH_PX))).fill(0);
-    for (const event of events) {
-      const share = (event.ts - start) / (end - start);
-      const bin = Math.min(counts.length - 1, Math.floor(share * counts.length));
-      if (bin >= 0) counts[bin] += 1;
-    }
-    return counts;
-  }, [events, start, end, width]);
-
   useEffect(() => {
     const element = canvas.current as HTMLCanvasElement;
     const context = element.getContext("2d");
     if (!context || width === 0) return;
+
+    const bins = new Array<number>(Math.max(1, Math.floor(width / TICK_PITCH_PX))).fill(0);
+    for (const event of events) {
+      const share = (event.ts - start) / (end - start);
+      const bin = Math.min(bins.length - 1, Math.floor(share * bins.length));
+      if (bin >= 0) bins[bin] += 1;
+    }
+
     const height = element.clientHeight;
     const ratio = window.devicePixelRatio || 1;
     element.width = width * ratio;
     element.height = height * ratio;
     context.scale(ratio, ratio);
+    context.fillStyle = color;
     const peak = Math.max(1, ...bins);
     bins.forEach((count, i) => {
       if (count === 0) return;
       const barHeight = height * (0.4 + 0.6 * Math.sqrt(count / peak));
-      const played = (i + 0.5) / bins.length <= progress;
-      context.fillStyle = played ? "#7dd3fc" : "rgba(125, 211, 252, 0.32)";
       context.beginPath();
       context.roundRect(i * TICK_PITCH_PX, (height - barHeight) / 2, TICK_WIDTH_PX, barHeight, 1);
       context.fill();
     });
-  }, [bins, progress, width]);
+  }, [events, start, end, color, width]);
 
   return <canvas ref={canvas} className="ticks" aria-hidden="true" />;
-}
+});
 
 export function Scrubber({
   date,
@@ -108,6 +110,10 @@ export function Scrubber({
 }: Props) {
   const rail = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ t: number; share: number } | null>(null);
+  const latestMove = useRef<{ moment: { t: number; share: number }; dragging: boolean } | null>(
+    null,
+  );
+  const moveFrame = useRef<number | null>(null);
   const progress = Math.min(1, Math.max(0, (t - start) / (end - start)));
 
   const momentAt = (clientX: number) => {
@@ -121,10 +127,24 @@ export function Scrubber({
     onSeek(momentAt(event.clientX).t);
   };
 
+  // A mouse can report far more often than the screen draws, so moves wait for the next frame
+  // and only the latest one counts.
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const moment = momentAt(event.clientX);
-    setHover(moment);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) onSeek(moment.t);
+    const dragging = event.currentTarget.hasPointerCapture(event.pointerId);
+    latestMove.current = { moment: momentAt(event.clientX), dragging };
+    if (moveFrame.current !== null) return;
+    moveFrame.current = requestAnimationFrame(() => {
+      moveFrame.current = null;
+      const move = latestMove.current;
+      if (!move) return;
+      setHover(move.moment);
+      if (move.dragging) onSeek(move.moment.t);
+    });
+  };
+
+  const onPointerLeave = () => {
+    latestMove.current = null;
+    setHover(null);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -213,10 +233,13 @@ export function Scrubber({
         aria-valuetext={formatClock(t, end)}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={onPointerLeave}
         onKeyDown={onKeyDown}
       >
-        <Ticks events={events} start={start} end={end} progress={progress} />
+        <Ticks events={events} start={start} end={end} color={TICK_AHEAD} />
+        <div className="ticks-played" style={{ clipPath: `inset(0 ${(1 - progress) * 100}% 0 0)` }}>
+          <Ticks events={events} start={start} end={end} color={TICK_PLAYED} />
+        </div>
         <div
           className="band"
           style={{ left: `${bandFrom * 100}%`, width: `${(bandTo - bandFrom) * 100}%` }}
@@ -246,8 +269,15 @@ export function Scrubber({
             "Nothing recorded this day"
           ) : (
             <>
-              <button className="group-count" aria-expanded={cardOpen} onClick={onToggleCard}>
+              <button
+                className="group-count"
+                aria-expanded={cardOpen}
+                aria-label={`${cardOpen ? "Hide" : "Show"} ${groupSize} events`}
+                title={cardOpen ? "Hide events" : "Show events"}
+                onClick={onToggleCard}
+              >
                 <strong>{groupSize}</strong> {groupSize === 1 ? "event" : "events"}
+                <Icon name="up" />
               </button>
               <select
                 aria-label="Show events within"

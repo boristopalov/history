@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { AskTab } from "./AskTab";
 import { Icon } from "./icons";
 import { SqlTab } from "./SqlTab";
@@ -12,7 +12,8 @@ type Props = {
   onPick: (anchor: NonNullable<Anchor>) => void;
 };
 
-export function Panel({ open, tz, onToggle, onResult, onPick }: Props) {
+/** Memoized, so that a big result table isn't rerendered on every frame of playback. */
+export const Panel = memo(function Panel({ open, tz, onToggle, onResult, onPick }: Props) {
   const [tab, setTab] = useState<"ask" | "sql">("ask");
 
   if (!open) {
@@ -47,4 +48,4 @@ export function Panel({ open, tz, onToggle, onResult, onPick }: Props) {
       </div>
     </aside>
   );
-}
+});

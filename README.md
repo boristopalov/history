@@ -56,6 +56,10 @@ The card above the timeline lists everything you did around the playhead, includ
 still going on then. The range beside the event count sets how far around it to look, and
 applies everywhere: the card, the band on the timeline, and the dots lit up on the map.
 
+Beside the timeline, a calendar shows a year at a glance, as a heatmap of how much happened each
+day. Location pings aren't counted, since they only say how often your phone reported. Picking a
+day opens it on the map.
+
 The panel on the right searches everything, as a **SQL** box or as **Ask**, an agent that
 writes the queries for you. Any result row with a `ts` goes on the map, placed by the nearest
 fix, and clicking the row jumps to that moment.

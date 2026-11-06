@@ -136,6 +136,17 @@ export function formatRange(rangeS: number): string {
   return rangeS < 3600 ? `±${rangeS / 60} min` : `±${rangeS / 3600} hr`;
 }
 
+/** The kind of source, without a suffix like the one on "receipts.mock". */
+export function sourceKind(source: string): string {
+  return source.split(".")[0];
+}
+
+/** The two lines of an event in a list: what it is, then whatever else there is to say. */
+export function eventLines(event: HistoryEvent, fallback: string): [string, string] {
+  if (event.title && event.body) return [event.title, event.body];
+  return [event.title || event.body || event.url || fallback, fallback];
+}
+
 /** One line for an event: "Priya: dinner at 8?", or whichever of those it has. */
 export function eventText(event: HistoryEvent): string {
   const text = [event.title, event.body].filter(Boolean).join(": ");

@@ -16,7 +16,8 @@ export type HistoryEvent = {
   location: Location | null;
 };
 
-export type Day = { date: string; events: number; fixes: number };
+/** `activity` is `events` without bare location pings, which are the path. */
+export type Day = { date: string; events: number; fixes: number; activity: number };
 
 /** When and where a query result row happened. Null when its columns don't say. */
 export type Anchor = { ts: number | null; location: Location | null } | null;

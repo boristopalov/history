@@ -9,6 +9,7 @@ const PIN = "#f59e0b";
 const IN_RANGE = "#0ea5e9";
 const MAX_POPUP_EVENTS = 5;
 const FOLLOW_MARGIN_PX = 140;
+const FILTER_INTERVAL_MS = 80;
 
 export type Point = { lat: number; lon: number };
 
@@ -309,26 +310,43 @@ export function MapView({
     source.setData(collection(pins.map((pin, index) => point(pin.lat, pin.lon, { index }))));
   }, [ready, pins]);
 
-  // The day unfolds up to the playhead.
+  // The day unfolds up to the playhead. Every filter change makes the map rebuild its tiles,
+  // so these wait a moment between updates, and the marker below carries the motion. Each
+  // change of t replaces the timer, so the last position always gets applied.
+  const lastFiltered = useRef(0);
   useEffect(() => {
     const instance = map.current;
     if (!ready || !instance) return;
-    instance.setFilter("path-behind", [
-      "all",
-      ["==", ["get", "gap"], false],
-      ["<=", ["get", "t"], t],
-    ]);
-    instance.setFilter("fixes", ["<=", ["get", "t"], t]);
-    instance.setFilter("events", ["<=", ["get", "t"], t]);
-    const inRange: maplibregl.ExpressionSpecification = [
-      "all",
-      ["<=", ["get", "t"], t + rangeS],
-      [">=", ["get", "end"], t - rangeS],
-    ];
-    instance.setFilter("events-in-range", inRange);
-    // Anything lit up has to be clickable, including events just ahead of the playhead.
-    instance.setFilter("events-target", ["any", ["<=", ["get", "t"], t], inRange]);
+    const apply = () => {
+      lastFiltered.current = performance.now();
+      instance.setFilter("path-behind", [
+        "all",
+        ["==", ["get", "gap"], false],
+        ["<=", ["get", "t"], t],
+      ]);
+      instance.setFilter("fixes", ["<=", ["get", "t"], t]);
+      instance.setFilter("events", ["<=", ["get", "t"], t]);
+      const inRange: maplibregl.ExpressionSpecification = [
+        "all",
+        ["<=", ["get", "t"], t + rangeS],
+        [">=", ["get", "end"], t - rangeS],
+      ];
+      instance.setFilter("events-in-range", inRange);
+      // Anything lit up has to be clickable, including events just ahead of the playhead.
+      instance.setFilter("events-target", ["any", ["<=", ["get", "t"], t], inRange]);
+    };
+    const wait = FILTER_INTERVAL_MS - (performance.now() - lastFiltered.current);
+    if (wait <= 0) {
+      apply();
+      return;
+    }
+    const timer = setTimeout(apply, wait);
+    return () => clearTimeout(timer);
+  }, [ready, t, rangeS]);
 
+  useEffect(() => {
+    const instance = map.current;
+    if (!ready || !instance) return;
     const position = positionAt(track, t);
     if (!position || !marker.current) {
       marker.current?.remove();
@@ -349,7 +367,7 @@ export function MapView({
         instance.easeTo({ center: [position.lon, position.lat], padding, duration: 700 });
       }
     }
-  }, [ready, track, t, rangeS, playing, padding]);
+  }, [ready, track, t, playing, padding]);
 
   useEffect(() => {
     const instance = map.current;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildTrack,
   dayBounds,
+  eventLines,
   eventsInRange,
   eventText,
   fixesUpTo,
@@ -13,6 +14,7 @@ import {
   MAX_GAP_S,
   positionAt,
   RANGES_S,
+  sourceKind,
 } from "./track";
 import type { HistoryEvent } from "./types";
 
@@ -113,6 +115,27 @@ describe("eventsInRange", () => {
   it("counts an event that's about to start", () => {
     const meeting = event(1200, { end_ts: 4800 });
     expect(eventsInRange([meeting], 1000, 300)).toEqual([meeting]);
+  });
+});
+
+describe("eventLines", () => {
+  it("puts the title first and the body under it", () => {
+    expect(eventLines(event(0, { title: "Priya", body: "dinner?" }), "Message")).toEqual([
+      "Priya",
+      "dinner?",
+    ]);
+  });
+
+  it("falls back to the kind of event for whatever's missing", () => {
+    expect(eventLines(event(0, { title: "Night Bus" }), "Music")).toEqual(["Night Bus", "Music"]);
+    expect(eventLines(event(0), "Music")).toEqual(["Music", "Music"]);
+  });
+});
+
+describe("sourceKind", () => {
+  it("drops a suffix", () => {
+    expect(sourceKind("receipts.mock")).toBe("receipts");
+    expect(sourceKind("photos")).toBe("photos");
   });
 });
 

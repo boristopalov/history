@@ -123,13 +123,24 @@ def test_days_groups_events_by_the_calendar_day_in_the_timezone(api):
     late_evening = 1793849400
     push(api, fix("f", late_evening), message("m", late_evening + 86400))
     assert api.get("/days", params={"tz": "UTC"}).json() == [
-        {"date": "2026-11-05", "events": 1, "fixes": 1},
-        {"date": "2026-11-06", "events": 1, "fixes": 0},
+        {"date": "2026-11-05", "events": 1, "fixes": 1, "activity": 0},
+        {"date": "2026-11-06", "events": 1, "fixes": 0, "activity": 1},
     ]
     assert [d["date"] for d in api.get("/days", params={"tz": "America/New_York"}).json()] == [
         "2026-11-04",
         "2026-11-05",
     ]
+
+
+def test_activity_counts_what_happened_rather_than_location_pings(api):
+    noon = 1793880000
+    photo = Event(source="photos", source_id="p", ts=noon, lat=1, lon=1, is_fix=True)
+    mock = Event(source="location.mock", source_id="m", ts=noon, lat=1, lon=1, is_fix=True)
+    push(api, fix("f", noon), mock, photo, message("a", noon))
+    (day,) = api.get("/days").json()
+    assert day["events"] == 4
+    assert day["fixes"] == 3
+    assert day["activity"] == 2
 
 
 def test_days_ignores_a_timestamp_no_date_can_hold(api):

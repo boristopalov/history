@@ -98,17 +98,21 @@ def days(conn: sqlite3.Connection, tz: ZoneInfo) -> list[dict[str, Any]]:
     """Calendar days in `tz` that have events, oldest first."""
     # Every timezone in use today is a multiple of 15 minutes from UTC, so a 15-minute
     # bucket never straddles local midnight. The bounds skip junk timestamps from ingest.
+    # `activity` leaves out bare location pings, which outnumber everything else and say
+    # how often the phone reported, not how much happened. A geotagged photo still counts.
     buckets = conn.execute(
         "SELECT CAST(ts / 900 AS INTEGER) * 900 AS bucket, COUNT(*) AS events, "
-        "SUM(is_fix) AS fixes FROM events WHERE ts BETWEEN 0 AND ? GROUP BY bucket",
+        "SUM(is_fix) AS fixes, "
+        "SUM(NOT (is_fix = 1 AND (source = 'location' OR source LIKE 'location.%'))) AS activity "
+        "FROM events WHERE ts BETWEEN 0 AND ? GROUP BY bucket",
         (MAX_TS,),
     )
     totals: dict[str, dict[str, Any]] = {}
     for bucket in buckets:
         date = datetime.fromtimestamp(bucket["bucket"], tz).date().isoformat()
-        day = totals.setdefault(date, {"date": date, "events": 0, "fixes": 0})
-        day["events"] += bucket["events"]
-        day["fixes"] += bucket["fixes"]
+        day = totals.setdefault(date, {"date": date, "events": 0, "fixes": 0, "activity": 0})
+        for key in ("events", "fixes", "activity"):
+            day[key] += bucket[key]
     return [totals[date] for date in sorted(totals)]
 
 
