@@ -1,6 +1,6 @@
-import { useState, type KeyboardEvent } from "react";
+import { memo, useState, type KeyboardEvent } from "react";
 import { runQuery } from "./api";
-import { ResultTable, resultSummary } from "./ResultTable";
+import { ResultView } from "./ResultView";
 import type { Anchor, QueryResult } from "./types";
 
 const STARTER = `SELECT ts, source, title, body
@@ -14,7 +14,8 @@ type Props = {
   onPick: (anchor: NonNullable<Anchor>) => void;
 };
 
-export function SqlTab({ onResult, onPick }: Props) {
+/** Memoized, so that a big result isn't rerendered on every frame of playback. */
+export const SqlTab = memo(function SqlTab({ onResult, onPick }: Props) {
   const [sql, setSql] = useState(STARTER);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,16 +73,16 @@ export function SqlTab({ onResult, onPick }: Props) {
       </div>
       {error && <p className="error">{error}</p>}
       {result && (
-        <>
-          <div className="result-bar">
-            <span>{resultSummary(result)}</span>
+        <ResultView
+          result={result}
+          onPick={onPick}
+          actions={
             <button className="link" onClick={clear}>
               Clear
             </button>
-          </div>
-          <ResultTable result={result} onPick={onPick} />
-        </>
+          }
+        />
       )}
     </div>
   );
-}
+});

@@ -11,6 +11,7 @@
   --tick: #7dd3fc;
   --danger: #fca5a5;
   --panel-width: 400px;
+  --panel-solid: #181c2a;
   --bottom-height: 172px;
   --gutter: 16px;
   --radius: 16px;
@@ -135,7 +136,7 @@ button:disabled {
 
 /* Timeline */
 
-/* The timeline, with its card above it, beside the year calendar. */
+/* The timeline beside the year calendar, in the space the sidebar leaves. */
 .bottom {
   position: absolute;
   bottom: var(--gutter);
@@ -147,22 +148,18 @@ button:disabled {
   pointer-events: none;
 }
 
-.dock {
-  display: flex;
-  min-width: 0;
-  flex: 0 0 calc(50% - 6px);
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+.with-panel .bottom {
+  right: calc(var(--gutter) * 2 + var(--panel-width));
 }
 
-.dock > *,
+.scrubber,
 .calendar-card {
   pointer-events: auto;
 }
 
 .scrubber {
-  width: 100%;
+  min-width: 0;
+  flex: 0 0 calc(50% - 6px);
   min-height: var(--bottom-height);
   padding: 14px 20px 12px;
 }
@@ -344,11 +341,11 @@ button:disabled {
 .group-count .icon {
   width: 13px;
   height: 13px;
-  transition: transform 0.15s ease;
+  margin-left: 2px;
 }
 
 .group-count[aria-expanded="true"] .icon {
-  transform: rotate(180deg);
+  color: var(--accent-soft);
 }
 
 .group-controls select {
@@ -365,32 +362,23 @@ button:disabled {
 
 /* Events around the playhead */
 
-.event-card {
-  display: flex;
-  flex-direction: column;
-  width: 340px;
-  max-width: 100%;
-  max-height: min(300px, 38vh);
-  overflow: hidden;
-}
-
-.event-card-top {
+.events-top {
   display: flex;
   flex: none;
   align-items: center;
   gap: 8px;
-  padding: 7px 8px 7px 14px;
+  padding: 2px 14px 8px;
   border-bottom: 1px solid var(--line);
   color: var(--text-dim);
   font-size: 13px;
 }
 
-.event-card-top strong {
+.events-top strong {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-.event-card-range {
+.events-range {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 11.5px;
@@ -398,6 +386,7 @@ button:disabled {
 
 .event-scroll {
   min-height: 0;
+  flex: 1;
   overflow-y: auto;
   margin: 4px;
 }
@@ -479,12 +468,16 @@ button:disabled {
 }
 
 .event-time {
+  display: flex;
   flex: none;
+  flex-direction: column;
   align-self: flex-start;
-  padding-top: 8px;
+  align-items: flex-end;
+  padding-top: 6px;
   color: var(--text-dim);
   font-family: var(--mono);
   font-size: 11px;
+  line-height: 1.35;
 }
 
 .event-empty {
@@ -494,17 +487,22 @@ button:disabled {
   font-size: 13px;
 }
 
-/* Search panel */
+/* Sidebar */
 
 .panel {
   position: absolute;
   top: var(--gutter);
   right: var(--gutter);
+  bottom: var(--gutter);
   display: flex;
   flex-direction: column;
   width: var(--panel-width);
-  max-height: calc(100% - var(--bottom-height) - var(--gutter) * 3);
   overflow: hidden;
+}
+
+/* Ask before the first question is only a search box, so the map keeps the rest. */
+.panel:has(> .panel-body:not([hidden]) .conversation[hidden]) {
+  bottom: auto;
 }
 
 .panel-open {
@@ -546,6 +544,18 @@ button:disabled {
 .segmented [aria-selected="true"] {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.segmented.small {
+  padding: 2px;
+  border-radius: 8px;
+}
+
+.segmented.small button {
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
 }
 
 .panel-body {
@@ -602,11 +612,59 @@ kbd {
   opacity: 0.75;
 }
 
+/* A query's result, under the SQL box or laid over the chat */
+
+.result-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-view .event-scroll {
+  margin: 0 -6px;
+}
+
 .result-bar {
   display: flex;
+  flex: none;
+  align-items: center;
   justify-content: space-between;
+  gap: 12px;
   color: var(--text-dim);
   font-size: 12px;
+}
+
+.result-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.result-sheet {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 14px;
+  background: var(--panel-solid);
+}
+
+.result-sheet-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: -6px;
+  font-weight: 600;
+}
+
+.result-sheet-top span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-scroll {
@@ -653,6 +711,10 @@ tr.pickable:hover td {
 
 /* Ask */
 
+.ask-tab {
+  position: relative;
+}
+
 .conversation {
   display: flex;
   min-height: 0;
@@ -661,25 +723,6 @@ tr.pickable:hover td {
   gap: 18px;
   overflow-y: auto;
   padding: 4px 14px 14px;
-}
-
-.suggestions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.suggestion {
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: var(--surface-raised);
-  color: var(--text-dim);
-  text-align: left;
-}
-
-.suggestion:hover {
-  background: var(--surface-hover);
-  color: var(--text);
 }
 
 .turn {
@@ -747,6 +790,24 @@ tr.pickable:hover td {
 .query-card .link,
 .query-card .error {
   margin: 0 10px;
+}
+
+.moments-link {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: 9px;
+  background: var(--surface-raised);
+  color: var(--accent-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.moments-link:hover {
+  background: var(--surface-hover);
 }
 
 .typing {
@@ -983,14 +1044,14 @@ button.cell:hover {
 .maplibregl-popup-content {
   padding: 8px;
   border-radius: 12px;
-  background: #181c2a;
+  background: var(--panel-solid);
   color: var(--text);
   box-shadow: 0 12px 32px rgba(15, 18, 30, 0.35);
 }
 
 .maplibregl-popup-tip {
-  border-top-color: #181c2a !important;
-  border-bottom-color: #181c2a !important;
+  border-top-color: var(--panel-solid) !important;
+  border-bottom-color: var(--panel-solid) !important;
 }
 
 .maplibregl-popup-close-button {
@@ -1060,6 +1121,17 @@ button.cell:hover {
   }
 }
 
+/* Too narrow to share a row with the sidebar, so the sidebar stops above the timeline. */
+@media (max-width: 1320px) {
+  .with-panel .bottom {
+    right: var(--gutter);
+  }
+
+  .panel {
+    bottom: calc(var(--bottom-height) + var(--gutter) * 2);
+  }
+}
+
 @media (max-width: 820px) {
   .bottom {
     flex-direction: column;
@@ -1067,11 +1139,8 @@ button.cell:hover {
     gap: 10px;
   }
 
-  .dock {
-    flex: none;
-  }
-
   .scrubber {
+    flex: none;
     padding: 12px 14px 10px;
   }
 
@@ -1081,14 +1150,10 @@ button.cell:hover {
     flex: none;
   }
 
-  .event-card {
-    width: 100%;
-  }
-
   .panel {
     left: var(--gutter);
+    bottom: calc(var(--bottom-height) + 132px + 10px + var(--gutter) * 2);
     width: auto;
-    max-height: calc(100% - var(--bottom-height) - 132px - var(--gutter) * 3);
   }
 }
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDays, fetchEvents } from "./api";
 import { CalendarView } from "./CalendarView";
-import { EventCard } from "./EventCard";
+import { EventsTab } from "./EventsTab";
 import { MapView, type Camera, type Pin, type Point } from "./MapView";
-import { Panel } from "./Panel";
+import { Panel, type PanelTab } from "./Panel";
 import { Scrubber } from "./Scrubber";
 import {
   buildTrack,
@@ -17,7 +17,6 @@ import type { Anchor, Day, HistoryEvent, QueryResult } from "./types";
 
 const PLAYBACK_SPEED = 1800; // seconds of the day per second: a day plays in 48 seconds
 const PANEL_WIDTH_PX = 400;
-const CARD_WIDTH_PX = 340;
 const RANGE_KEY = "history.eventRange";
 const NARROW_PX = 820;
 
@@ -58,7 +57,7 @@ export function App() {
   const [camera, setCamera] = useState<Camera | null>(null);
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > NARROW_PX);
   const [narrow, setNarrow] = useState(() => window.innerWidth <= NARROW_PX);
-  const [cardOpen, setCardOpen] = useState(() => window.innerWidth > NARROW_PX);
+  const [tab, setTab] = useState<PanelTab>("events");
   const [rangeS, setRangeS] = useState(savedRange);
 
   // A jump to another day sets where to land before that day has loaded.
@@ -204,16 +203,13 @@ export function App() {
     }
   }, []);
 
-  // On a phone there's only room for one of these at a time.
-  const togglePanel = useCallback(() => {
-    if (narrow && !panelOpen) setCardOpen(false);
-    setPanelOpen(!panelOpen);
-  }, [narrow, panelOpen]);
+  const togglePanel = useCallback(() => setPanelOpen((open) => !open), []);
 
-  const toggleCard = useCallback(() => {
-    if (narrow && !cardOpen) setPanelOpen(false);
-    setCardOpen(!cardOpen);
-  }, [narrow, cardOpen]);
+  const eventsOpen = panelOpen && tab === "events";
+  const toggleEvents = useCallback(() => {
+    setTab("events");
+    setPanelOpen(!eventsOpen);
+  }, [eventsOpen]);
 
   const pickDate = useCallback((day: string) => {
     landing.current = null;
@@ -223,17 +219,17 @@ export function App() {
   const padding = useMemo(
     () => ({
       top: 56,
-      left: cardOpen && !narrow ? CARD_WIDTH_PX + 56 : 56,
+      left: 56,
       bottom: 216,
       right: panelOpen && !narrow ? PANEL_WIDTH_PX + 56 : 56,
     }),
-    [panelOpen, cardOpen, narrow],
+    [panelOpen, narrow],
   );
 
   const noData = !loading && !failure && days.length === 0;
 
   return (
-    <main className="app">
+    <main className={panelOpen ? "app with-panel" : "app"}>
       <MapView
         track={track}
         events={events}
@@ -255,45 +251,47 @@ export function App() {
       )}
       <Panel
         open={panelOpen}
+        tab={tab}
         tz={tz}
+        events={
+          eventsOpen && (
+            <EventsTab
+              group={group}
+              dayEmpty={events.length === 0}
+              t={t}
+              start={start}
+              end={end}
+              rangeS={rangeS}
+              onPick={pickEvent}
+            />
+          )
+        }
+        onTab={setTab}
         onToggle={togglePanel}
         onResult={showResult}
         onPick={jumpTo}
       />
       <div className="bottom">
         {date && (
-          <div className="dock">
-            {cardOpen && events.length > 0 && (
-              <EventCard
-                group={group}
-                t={t}
-                start={start}
-                end={end}
-                rangeS={rangeS}
-                onPick={pickEvent}
-                onClose={toggleCard}
-              />
-            )}
-            <Scrubber
-              date={date}
-              days={days}
-              start={start}
-              end={end}
-              t={t}
-              playing={playing}
-              loading={loading}
-              track={track}
-              events={events}
-              groupSize={group.length}
-              rangeS={rangeS}
-              cardOpen={cardOpen}
-              onRange={changeRange}
-              onToggleCard={toggleCard}
-              onDate={pickDate}
-              onSeek={seek}
-              onTogglePlay={togglePlay}
-            />
-          </div>
+          <Scrubber
+            date={date}
+            days={days}
+            start={start}
+            end={end}
+            t={t}
+            playing={playing}
+            loading={loading}
+            track={track}
+            events={events}
+            groupSize={group.length}
+            rangeS={rangeS}
+            eventsOpen={eventsOpen}
+            onRange={changeRange}
+            onToggleEvents={toggleEvents}
+            onDate={pickDate}
+            onSeek={seek}
+            onTogglePlay={togglePlay}
+          />
         )}
         {days.length > 0 && <CalendarView days={days} selected={date} onPick={pickDate} />}
       </div>

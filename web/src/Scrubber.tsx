@@ -30,9 +30,9 @@ type Props = {
   events: HistoryEvent[];
   groupSize: number;
   rangeS: number;
-  cardOpen: boolean;
+  eventsOpen: boolean;
   onRange: (rangeS: number) => void;
-  onToggleCard: () => void;
+  onToggleEvents: () => void;
   onDate: (date: string) => void;
   onSeek: (t: number) => void;
   onTogglePlay: () => void;
@@ -101,9 +101,9 @@ export function Scrubber({
   events,
   groupSize,
   rangeS,
-  cardOpen,
+  eventsOpen,
   onRange,
-  onToggleCard,
+  onToggleEvents,
   onDate,
   onSeek,
   onTogglePlay,
@@ -271,13 +271,13 @@ export function Scrubber({
             <>
               <button
                 className="group-count"
-                aria-expanded={cardOpen}
-                aria-label={`${cardOpen ? "Hide" : "Show"} ${groupSize} events`}
-                title={cardOpen ? "Hide events" : "Show events"}
-                onClick={onToggleCard}
+                aria-expanded={eventsOpen}
+                aria-label={`${eventsOpen ? "Hide" : "Show"} ${groupSize} events`}
+                title={eventsOpen ? "Hide events" : "Show events"}
+                onClick={onToggleEvents}
               >
                 <strong>{groupSize}</strong> {groupSize === 1 ? "event" : "events"}
-                <Icon name="up" />
+                <Icon name="panel" />
               </button>
               <select
                 aria-label="Show events within"

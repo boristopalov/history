@@ -11,7 +11,6 @@ const paths = {
   stop: <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" stroke="none" />,
   left: <path d="M10 3 5 8l5 5" />,
   right: <path d="m6 3 5 5-5 5" />,
-  up: <path d="m3.5 10 4.5-4.5 4.5 4.5" />,
   send: <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />,
   close: <path d="m4 4 8 8M12 4l-8 8" />,
   pin: (
