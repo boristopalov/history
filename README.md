@@ -117,7 +117,6 @@ messages = 30
 | Source | Read from | Notes |
 | --- | --- | --- |
 | location | HistoryLocation helper | Only while the Mac is awake |
-| app_usage | knowledgeC.db (behind Screen Time) | This Mac only, not your iPhone |
 | photos | Photos.sqlite | Geotagged photos are also location fixes |
 | messages | chat.db | Names come from your Contacts |
 | browser | Safari, Chrome, Firefox | Every profile |

@@ -4,7 +4,6 @@ import importlib.util
 import logging
 from pathlib import Path
 
-from history.collectors.app_usage import app_usage_collector
 from history.collectors.base import Collector
 from history.collectors.browsers import browser_collectors
 from history.collectors.calendar import google_calendar_collector, ics_collector
@@ -63,7 +62,6 @@ def all_collectors(config: Config) -> list[Collector]:
         git_collector(config.git_roots, config.git_emails),
         transactions_collector(config.transactions_dir),
         simplefin_collector(config.credentials_dir, demo=config.simplefin_demo),
-        app_usage_collector(),
         receipts_collector(),
         partiful_collector(),
         *([mock_health_collector()] if config.health_mock else []),

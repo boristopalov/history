@@ -7,7 +7,6 @@ from datetime import datetime
 import httpx
 
 from history import credentials
-from history.collectors.app_usage import app_usage_collector
 from history.collectors.base import APPLE_EPOCH
 from history.collectors.health import mock_health_collector
 from history.collectors.partiful import partiful_collector
@@ -307,22 +306,6 @@ def test_simplefin_claim_exchanges_a_token_for_an_access_url():
 def test_credentials_are_only_readable_by_the_owner(tmp_path):
     credentials.save(tmp_path / "creds", "x", {"a": 1})
     assert (tmp_path / "creds/x.json").stat().st_mode & 0o777 == 0o600
-
-
-def test_app_usage_reads_only_app_sessions(tmp_path):
-    path = make_db(
-        tmp_path / "knowledgeC.db",
-        """CREATE TABLE ZOBJECT (Z_PK INTEGER PRIMARY KEY, ZUUID TEXT, ZSTREAMNAME TEXT,
-            ZVALUESTRING TEXT, ZSTARTDATE REAL, ZENDDATE REAL);
-        INSERT INTO ZOBJECT VALUES (1, 'u1', '/app/usage', 'com.example.Editor', 100, 160);
-        INSERT INTO ZOBJECT VALUES (2, 'u2', '/display/isBacklit', NULL, 100, 160);
-        INSERT INTO ZOBJECT VALUES (3, 'u3', '/app/usage', 'com.example.Chat', 200, 230);""",
-    )
-    collector = app_usage_collector(path)
-    first, second = events_from(collector)
-    assert (first.title, first.data["bundle_id"]) == ("Editor", "com.example.Editor")
-    assert (first.ts, first.end_ts) == (100 + APPLE_EPOCH, 160 + APPLE_EPOCH)
-    assert [e.title for e in events_from(collector, cursor="1")] == ["Chat"]
 
 
 CHAT_SCHEMA = """

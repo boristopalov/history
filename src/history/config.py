@@ -12,7 +12,6 @@ CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 # Sources that are rescanned in full run less often than the default interval.
 DEFAULT_INTERVALS = {
-    "app_usage": 300,
     "calendar": 300,
     "demo": 900,
     "git": 600,
