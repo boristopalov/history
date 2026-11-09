@@ -5,8 +5,9 @@ expects 24 a day or fewer). So the cursor records when we last asked, and it's c
 *before* asking: restarts and failures can't add requests, and nothing is lost because each
 request covers a window much longer than the gap between requests.
 
-Until a real account is linked, this reads SimpleFIN's public demo account, so the timeline
-has transactions to show. Those are invented, and marked `mock` and "[demo]" like health data.
+Until a real account is linked, it can read SimpleFIN's public demo account instead
+(`simplefin_demo = true`), so the timeline has transactions to show. Those are invented, and
+marked `mock` and "[demo]" like health data.
 
 Setup is in the README.
 """
@@ -126,13 +127,23 @@ def _batches(
     yield Batch(collector=name, events=events)
 
 
+def _not_linked(cursor: str | None) -> Iterator[Batch]:
+    raise CollectorNotReady("no account linked; run `hist simplefin-link`")
+
+
 def simplefin_collector(
     directory: Path,
     http: httpx.Client | None = None,
     now: Callable[[], float] = time.time,
+    demo: bool = False,
 ) -> Collector:
-    """Reads the linked account, or the demo if there isn't one. Checked when the daemon starts."""
+    """Reads the linked account. Without one, reads the public demo account if `demo` is set.
+
+    Checked when the daemon starts.
+    """
     stored = credentials.load(directory, CREDENTIALS)
+    if stored is None and not demo:
+        return Collector(name="simplefin", source="transactions", collect=_not_linked)
     demo = stored is None
     name = "simplefin.demo" if demo else "simplefin"
     access_url = DEMO_ACCESS_URL if demo else stored["access_url"]

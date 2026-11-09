@@ -49,8 +49,9 @@ class Config:
     anthropic_api_key: str | None = None  # for Ask; falls back to ANTHROPIC_API_KEY
     credentials_dir: Path = CONFIG_DIR / "credentials"
     spotify_client_id: str | None = None
-    health_mock: bool = True  # invented data until the iPhone link exists
-    demo_week: bool = True  # an invented week of locations, trips and purchases
+    health_mock: bool = False  # invented health data, until the iPhone link exists
+    demo_week: bool = False  # an invented week of locations, trips and purchases
+    simplefin_demo: bool = False  # SimpleFIN's public demo account, until one is linked
 
     @property
     def server_url(self) -> str:

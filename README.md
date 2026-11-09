@@ -161,21 +161,21 @@ It looks back a year on the first run, and keeps only the parsed fields, not the
 **Luma.** Its API needs a paid plan and appears to cover only events you host. Add an ICS link
 to `ics_feeds` if you have one.
 
-**Apple Health.** `health` is invented data, so that the source exists before the iPhone link
-does. To replace it, set `health_mock = false` and push real samples to `/ingest` with
+**Apple Health.** There's no iPhone link yet. `health_mock = true` fills `health` with invented
+data so the source exists. Real samples go to `/ingest` with
 `source: "health"`.
 
 ### Mock data
 
-`demo_week` invents the past week around San Francisco: a location trail, Uber trips, card
-purchases and geotagged photos that all agree with each other. It's on by default so a demo has
-linked data. Everything fake says `[mock]` in its title and `mock` in `data`. Real messages and
+`demo_week = true` invents the past week around San Francisco: a location trail, Uber trips,
+card purchases and geotagged photos that all agree with each other. It's off by default. Everything fake says `[mock]` in its title and `mock` in `data`. Real messages and
 browsing get placed on the fake trail, and show `via: location.mock`.
 
-Until you link a real account, `transactions` also shows SimpleFIN's public demo account, whose
-rows say `[demo]`. Linking replaces it after a daemon restart.
+`simplefin_demo = true` shows SimpleFIN's public demo account in `transactions` until you link
+a real account. Its rows say `[demo]`. Linking replaces it after a daemon restart.
 
-To go back to real data, set `demo_week = false` and `health_mock = false`, then delete the rows:
+All three mock sources (`demo_week`, `health_mock`, `simplefin_demo`) are off by default. To
+remove mock rows written while one was on, turn it off, restart the daemon, and delete them:
 
 ```sh
 sqlite3 ~/.local/share/history/history.db "DELETE FROM events WHERE json_extract(data, '$.mock') = 1"

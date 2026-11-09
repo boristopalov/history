@@ -62,7 +62,7 @@ def all_collectors(config: Config) -> list[Collector]:
         spotify_collector(config.spotify_client_id, config.credentials_dir),
         git_collector(config.git_roots, config.git_emails),
         transactions_collector(config.transactions_dir),
-        simplefin_collector(config.credentials_dir),
+        simplefin_collector(config.credentials_dir, demo=config.simplefin_demo),
         app_usage_collector(),
         receipts_collector(),
         partiful_collector(),

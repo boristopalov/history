@@ -226,7 +226,7 @@ def test_simplefin_demo_is_labelled_and_never_in_the_future(tmp_path, api):
 
     def run_at(moment):
         http = httpx.Client(transport=httpx.MockTransport(handler))
-        collector = simplefin_collector(tmp_path, http=http, now=lambda: moment)
+        collector = simplefin_collector(tmp_path, http=http, now=lambda: moment, demo=True)
         run_collectors(api, [collector])
         return api.get("/timeline", params={"source": "transactions"}).json()
 
@@ -257,7 +257,7 @@ def test_simplefin_demo_refreshes_in_place_when_its_ids_change(tmp_path, api):
             )
 
         http = httpx.Client(transport=httpx.MockTransport(handler))
-        collector = simplefin_collector(tmp_path, http=http, now=lambda: moment)
+        collector = simplefin_collector(tmp_path, http=http, now=lambda: moment, demo=True)
         run_collectors(api, [collector])
         return api.get("/timeline", params={"source": "transactions"}).json()
 
@@ -277,12 +277,20 @@ def test_a_linked_account_replaces_the_demo(tmp_path):
     assert not any(e.data.get("mock") or e.title.startswith("[demo]") for e in events)
 
 
-def test_simplefin_uses_the_demo_account_until_linked(tmp_path):
+def test_simplefin_uses_the_demo_account_until_linked_when_asked(tmp_path):
     requests = []
-    collector = simplefin_collector(tmp_path, http=simplefin_api(requests))
+    collector = simplefin_collector(tmp_path, http=simplefin_api(requests), demo=True)
     events_from(collector)
     assert collector.name == "simplefin.demo"
     assert requests[0].url.host == "beta-bridge.simplefin.org"
+
+
+def test_unlinked_simplefin_adds_nothing_by_default(tmp_path, api):
+    requests = []
+    collector = simplefin_collector(tmp_path, http=simplefin_api(requests))
+    run_collectors(api, [collector])
+    assert requests == []
+    assert api.get("/timeline", params={"source": "transactions"}).json() == []
 
 
 def test_simplefin_claim_exchanges_a_token_for_an_access_url():
